@@ -2862,6 +2862,9 @@ launch_template() {
   # sources are not guaranteed to load that scope, so a worker would
   # otherwise run with attribution back on; carrying it per launch keeps the
   # policy in force regardless of which settings scopes end up loaded.
+  # The same JSON pins the worker's prompt-cache lifetime and auto-compact
+  # window (promptCacheTtl, autoCompactWindow); docs/configuration.md
+  # "Claude prompt-cache lifetime and compaction window" owns why and the values.
   # Claude Code's --settings flag takes one value, a file path or an inline
   # JSON string (https://code.claude.com/docs/en/cli-reference). A secondmate's
   # busy hooks share that value, in state/<id>.claude-settings.json, and the
@@ -7435,7 +7438,7 @@ case "$LAUNCH" in
   if [ "$KIND" = secondmate ]; then
     LAUNCH=${LAUNCH//__CLAUDESETTINGS__/$(shell_quote "$STATE_REAL/$ID.claude-settings.json")}
   else
-    claude_settings="'{\"feedbackDrafts\":\"off\"__CLAUDEATTRIBUTION__}'"
+    claude_settings="'{\"feedbackDrafts\":\"off\",\"promptCacheTtl\":\"1h\",\"autoCompactWindow\":250000__CLAUDEATTRIBUTION__}'"
     LAUNCH=${LAUNCH//__CLAUDESETTINGS__/$claude_settings}
   fi
   ;;

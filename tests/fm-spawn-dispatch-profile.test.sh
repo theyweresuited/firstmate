@@ -1922,7 +1922,7 @@ test_claude_forwards_firstmate_config_dir_when_set() {
   status=$?
   expect_code 0 "$status" "claude spawn with CLAUDE_CONFIG_DIR set should succeed"
   launch=$(fm_test_launch_unframe "$(cat "$LAUNCH_LOG")")
-  assert_contains "$launch" "CLAUDE_CONFIG_DIR='$CASE_DIR/claude-work' env -u CURSOR_AGENT -u CURSOR_INVOKED_AS -u GEMINI_CLI CLAUDE_CODE_ENABLE_PROMPT_SUGGESTION=false CLAUDE_CODE_SEND_FEEDBACK=0 claude --dangerously-skip-permissions $(claude_worker_add_dirs "$HOME_DIR" "$id")--settings '{\"feedbackDrafts\":\"off\",\"attribution\":{\"commit\":\"\",\"pr\":\"\",\"sessionUrl\":false}}'" \
+  assert_contains "$launch" "CLAUDE_CONFIG_DIR='$CASE_DIR/claude-work' env -u CURSOR_AGENT -u CURSOR_INVOKED_AS -u GEMINI_CLI CLAUDE_CODE_ENABLE_PROMPT_SUGGESTION=false CLAUDE_CODE_SEND_FEEDBACK=0 claude --dangerously-skip-permissions $(claude_worker_add_dirs "$HOME_DIR" "$id")--settings '{\"feedbackDrafts\":\"off\",\"promptCacheTtl\":\"1h\",\"autoCompactWindow\":250000,\"attribution\":{\"commit\":\"\",\"pr\":\"\",\"sessionUrl\":false}}'" \
     "claude launch did not forward firstmate's CLAUDE_CONFIG_DIR to the crewmate pane"
   pass "claude forwards firstmate's CLAUDE_CONFIG_DIR so the crewmate uses the same credential store"
 }
@@ -2021,6 +2021,16 @@ assert_attribution_policy_absent() {  # <launch-command> <what>
     || fail "$what launch settings JSON still disables Claude attribution: $settings"
 }
 
+# A Claude worker runs in another project's worktree, where firstmate's own
+# .claude/settings.json does not load, so its launch must pin the 1-hour prompt
+# cache and the auto-compact window itself.
+assert_worker_cache_policy() {  # <launch-command> <what>
+  local launch=$1 what=$2 settings
+  settings=$(claude_settings_json_arg "$launch")
+  printf '%s' "$settings" | jq -e '.promptCacheTtl == "1h" and .autoCompactWindow == 250000' >/dev/null \
+    || fail "$what launch settings JSON does not pin the worker prompt cache and compact window: $settings"
+}
+
 test_claude_task_launch_carries_control_channel_authority() {
   local rec id out status launch
   id=profile-claude-control-channel-z21
@@ -2093,6 +2103,7 @@ test_claude_crewmate_launch_carries_the_attribution_policy() {
   expect_code 0 "$status" "claude crewmate spawn should succeed"$'\n'"$out"
   launch=$(fm_test_launch_unframe "$(cat "$LAUNCH_LOG")")
   assert_attribution_policy "$launch" "claude crewmate"
+  assert_worker_cache_policy "$launch" "claude crewmate"
   [ -d "$HOME_DIR/state/$id.git-hooks" ] || fail "default config did not install the AI trailer hooks"
   pass "a claude crewmate launch carries the attribution-off policy in its own settings"
 }
@@ -2109,6 +2120,7 @@ test_keep_ai_trailers_omits_attribution_settings_and_strip_hooks() {
   expect_code 0 "$status" "claude spawn with keep-ai-trailers should succeed"$'\n'"$out"
   launch=$(fm_test_launch_unframe "$(cat "$LAUNCH_LOG")")
   assert_attribution_policy_absent "$launch" "opted-in claude"
+  assert_worker_cache_policy "$launch" "opted-in claude"
   assert_not_contains "$launch" 'fm-git-strip-ai-trailers.sh' \
     "opted-in launch still overrides the repository hooksPath"
   [ ! -e "$HOME_DIR/state/$id.git-hooks" ] \
@@ -2536,7 +2548,7 @@ claude_expected_launch() {  # <launch> <home> <id> <permission-flag>
   [ "$(printf '%s' "$doorbell" | "$ROOT/bin/fm-operational-input.sh" doorbell-kind)" = launch-brief ] \
     || doorbell="not a launch-brief doorbell"
   quoted="'$(printf '%s' "$doorbell" | sed "s/'/'\\\\''/g")'"
-  printf '%s' "export COMPACT_ADVISER_DISABLE=1; $(task_inbox_export "$2" "$3")$(fm_test_launch_git_prefix "$1")env -u CURSOR_AGENT -u CURSOR_INVOKED_AS -u GEMINI_CLI CLAUDE_CODE_ENABLE_PROMPT_SUGGESTION=false CLAUDE_CODE_SEND_FEEDBACK=0 claude $4 $(claude_worker_add_dirs "$2" "$3")--settings '{\"feedbackDrafts\":\"off\",\"attribution\":{\"commit\":\"\",\"pr\":\"\",\"sessionUrl\":false}}' $CLAUDE_CONTROL_CHANNEL_FLAG $quoted"
+  printf '%s' "export COMPACT_ADVISER_DISABLE=1; $(task_inbox_export "$2" "$3")$(fm_test_launch_git_prefix "$1")env -u CURSOR_AGENT -u CURSOR_INVOKED_AS -u GEMINI_CLI CLAUDE_CODE_ENABLE_PROMPT_SUGGESTION=false CLAUDE_CODE_SEND_FEEDBACK=0 claude $4 $(claude_worker_add_dirs "$2" "$3")--settings '{\"feedbackDrafts\":\"off\",\"promptCacheTtl\":\"1h\",\"autoCompactWindow\":250000,\"attribution\":{\"commit\":\"\",\"pr\":\"\",\"sessionUrl\":false}}' $CLAUDE_CONTROL_CHANNEL_FLAG $quoted"
 }
 
 test_claude_permission_mode_absent_defaults_to_bypass() {

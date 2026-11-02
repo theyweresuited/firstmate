@@ -1,4 +1,6 @@
 {
+  "promptCacheTtl": "1h",
+  "autoCompactWindow": 230000,
   "hooks": {
     "SessionStart": [
       {
