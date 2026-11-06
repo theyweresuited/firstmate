@@ -431,6 +431,20 @@ The supervision protocol is chosen when the session starts, so create or remove 
 The file is local to each home and is not inherited by secondmate homes.
 [The Codex protocol](supervision-protocols/codex.md) owns the parked operating protocol, and `bin/fm-codex-stop-park.sh` owns version selection, registration, and failure fallback.
 
+## Claude prompt-cache lifetime and compaction window
+
+Firstmate pins two Claude Code settings for the Claude sessions it runs, because its sessions idle between wakes and grow long.
+The tracked `.claude/settings.json` sets `promptCacheTtl` to `1h` and `autoCompactWindow` to `230000` for every Claude session started in a firstmate checkout, which covers the primary and every secondmate.
+`bin/fm-spawn.sh` sets `promptCacheTtl` to `1h` and `autoCompactWindow` to `250000` in each Claude ship and scout worker's `--settings` value, because a worker runs in another project's worktree, where firstmate's project settings do not load.
+
+Without the pin, Claude Code picks the cache lifetime itself: 1 hour on a subscription within its usage limits, 5 minutes on an API key or once the account is using usage credits.
+With a 5-minute cache, every wake after more than 5 idle minutes re-writes the whole context at the cache-write price, which firstmate's multi-minute waits hit constantly.
+A 1-hour write costs more than a 5-minute write, but one re-write of a large context costs far more than the difference.
+
+Auto-compaction fires about 33k tokens below the window, so the primary and secondmates compact near 200k tokens of context and workers near 220k, instead of growing toward the model's 1M-token limit where every turn re-reads the whole context.
+The `CLAUDE_CODE_PROMPT_CACHE_TTL` environment variable takes precedence over `promptCacheTtl`, so a captain can override the cache lifetime without editing tracked files.
+`/context` in a session shows the active auto-compact window.
+
 ## Warm-cache compaction (config/warm-compact)
 
 Create the home-local `config/warm-compact` file to compact an idle Claude primary and the supervision host's engine conversation before their prompt cache expires.
